@@ -3,6 +3,7 @@
 class Workout {
   date = new Date();
   id = (Date.now() + '').slice(-10);
+  clicks = 0;
 
   constructor(coords, distance, duration) {
     this.coords = coords; // [lat, lng]
@@ -16,6 +17,9 @@ class Workout {
     this.description = `${this.type[0].toUpperCase()}${this.type.slice(1)} on ${
       months[this.date.getMonth()]
     } ${this.date.getDate()}`;
+  }
+  click() {
+    this.clicks++;
   }
 }
 
@@ -70,12 +74,23 @@ const inputElevation = document.querySelector('.form__input--elevation');
 class App {
   // private class field
   #map;
+  #mapZoomLevel = 13;
   #mapEvent;
   #workouts = [];
   constructor() {
+    // Get user's position
     this._getPosition();
-    form.addEventListener('submit', this._newWorkout.bind(this)); // in this case the '_newWorkout' will point to 'form' not to App class unless we bind it.
-    inputType.addEventListener('change', this._toggleElevationField); // in this case it is not necessary bind 'this' keyword because this method does not use 'this' keyword anywhere
+    // Get data from local storage
+    this._getLocalStorage();
+
+    // Attach event handlers
+
+    // in this case the '_newWorkout' will point to 'form' not to App class unless we bind it.
+    form.addEventListener('submit', this._newWorkout.bind(this));
+    // in this case it is not necessary bind 'this' keyword because this method does not use 'this' keyword anywhere
+    inputType.addEventListener('change', this._toggleElevationField);
+    // move to popup position when click in the list element
+    containerWorkouts.addEventListener('click', this._moveToPopup.bind(this));
   }
   _getPosition() {
     if (navigator.geolocation)
@@ -91,7 +106,7 @@ class App {
     const longitude = position.coords.longitude;
     const coords = [latitude, longitude];
     // console.log(this); -> undefined - because when 'getCurrentPosition' calls '_loadMap' function this is not a method function, but a regular function. In this case it is necessary to bind the 'this' keyword.
-    this.#map = L.map('map').setView(coords, 13);
+    this.#map = L.map('map').setView(coords, this.#mapZoomLevel);
 
     L.tileLayer('https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
       attribution:
@@ -100,6 +115,9 @@ class App {
 
     // Handling clicks on map
     this.#map.on('click', this._showForm.bind(this)); // in this case the '_showForm' will point to 'this.#map' not to App class unless we bind it.
+    this.#workouts.forEach(workoutEl => {
+      this._renderWorkoutMarker(workoutEl);
+    });
   }
 
   _showForm(mapE) {
@@ -166,6 +184,7 @@ class App {
     this.#workouts.push(workout);
     this._renderWorkoutMarker(workout);
     this._renderWorkout(workout);
+    this._setLocalStorage();
 
     // clear input fields
     this._hideForm();
@@ -237,6 +256,44 @@ class App {
     </li>
         `;
     form.insertAdjacentHTML('afterend', html);
+  }
+  _moveToPopup(e) {
+    // any place we click inside of one of the list elements which contains 'workout' will be the target
+    const workoutElement = e.target.closest('.workout');
+
+    if (!workoutElement) return;
+
+    // find the same element comparing dataset.id with workouts array
+    const workout = this.#workouts.find(
+      workoutEl => workoutEl.id === workoutElement.dataset.id
+    );
+    this.#map.setView(workout.coords, this.#mapZoomLevel, {
+      animate: true,
+      pan: {
+        duration: 1,
+      },
+    });
+    // using the public interface
+
+    // this 'click' method is not gonna work with data that come from local storage, because once it is storaged and back again it is NOT consider the object that extends from workout class, but only a regular object. So one solution would be in the method '_getLocalStorage' interate with the local storage array and pass it to a new array accourding to the type of object it is 'Running' or 'Cycling'. So only after that would be possible to use the 'click' method again.
+    // workout.click();
+  }
+  _setLocalStorage() {
+    localStorage.setItem('workouts', JSON.stringify(this.#workouts));
+  }
+
+  _getLocalStorage() {
+    const data = JSON.parse(localStorage.getItem('workouts'));
+    if (!data) return;
+    this.#workouts = data;
+    this.#workouts.forEach(workoutEl => {
+      this._renderWorkout(workoutEl);
+    });
+  }
+
+  reset() {
+    localStorage.removeItem('workouts');
+    location.reload();
   }
 }
 
